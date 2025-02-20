@@ -1,5 +1,5 @@
-name: ChatGPT CodeReviewer
-description: 'A Code Review Action Powered By ChatGPT'
+name: CodeReviewer
+description: 'A Code Review Action'
 branding:
   icon: 'gift'
   color: orange
