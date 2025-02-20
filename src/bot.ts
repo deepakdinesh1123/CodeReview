@@ -185,7 +185,7 @@ export const robot = (app: Probot) => {
             fileReviews.push({
               path: file.filename,
               body: res.review,
-              position: res.position,
+              position: patch.split('\n').length - 1,
             })
           }
         } catch (e) {
