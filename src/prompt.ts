@@ -37,7 +37,7 @@ Filename: <filename> Patch: <patch>
 you must go through the path and return a review (if absolutely required) in the following format
 
 review: <review>
-position: the position (line number) from which a code change is required
+position: the position (line number, must never be less than 1) from which a code change is required
 
 zelthy-initium Code Review Guidelines
 

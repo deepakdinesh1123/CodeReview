@@ -187,13 +187,6 @@ export const robot = (app: Probot) => {
               body: res.review,
               position: res.position,
             })
-          } else {
-            fileReviews.push({
-                path: file.filename,
-                body: "",
-                position: 0
-              }
-            )
           }
         } catch (e) {
           log.info(`review ${file.filename} failed`, e);
