@@ -29,7 +29,8 @@
     "next": "^13.1.6",
     "node-fetch": "^3.3.0",
     "openai": "^4.71.0",
-    "probot": "^12.2.4"
+    "probot": "^12.2.4",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^24.0.1",

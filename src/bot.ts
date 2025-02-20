@@ -76,14 +76,31 @@ export const robot = (app: Probot) => {
         return 'no target label attached';
       }
 
-      const data = await context.octokit.repos.compareCommits({
+      const {data: allFileChanges} = await context.octokit.pulls.listFiles({
+        owner: repo.owner,
+        repo: repo.repo,
+        pull_number: pull_request.number,
+      });
+
+      let combinedChanges = '';
+
+      for (const file of allFileChanges) {
+        const { filename, status, patch } = file;
+        if (patch?.length && patch.length < MAX_PATCH_COUNT) {
+          combinedChanges += `Filename: ${filename}\nStatus: ${status}\nPatch:\n${patch}\n\n`;
+        } else {
+          combinedChanges += `Filename: ${filename}\nStatus: ${status}\n Patch: Too big to be included in prompt`
+        }
+      }
+
+      const commitDiff = await context.octokit.repos.compareCommits({
         owner: repo.owner,
         repo: repo.repo,
         base: context.payload.pull_request.base.sha,
         head: context.payload.pull_request.head.sha,
       });
 
-      let { files: changedFiles, commits } = data.data;
+      let { files: changedFiles, commits } = commitDiff.data;
 
       log.debug("compareCommits, base:", context.payload.pull_request.base.sha, "head:", context.payload.pull_request.head.sha)
       log.debug("compareCommits.commits:", commits)
@@ -138,7 +155,15 @@ export const robot = (app: Probot) => {
 
       console.time('gpt cost');
 
-      const ress = [];
+      const fileReviews = [];
+      const prSummary = await chat?.getPRSummary(combinedChanges);
+
+      await context.octokit.pulls.update({
+        owner: repo.owner,
+        repo: repo.repo,
+        pull_number: pull_request.number,
+        body: prSummary
+      });
 
       for (let i = 0; i < changedFiles.length; i++) {
         const file = changedFiles[i];
@@ -155,27 +180,42 @@ export const robot = (app: Probot) => {
           continue;
         }
         try {
-          const res = await chat?.codeReview(patch);
+          const res = await chat?.fileReview(patch, file.filename);
           if (!!res) {
-            ress.push({
+            fileReviews.push({
               path: file.filename,
-              body: res,
-              position: patch.split('\n').length - 1,
+              body: res.review,
+              position: res.position,
             })
+          } else {
+            fileReviews.push({
+                path: file.filename,
+                body: "",
+                position: 0
+              }
+            )
           }
         } catch (e) {
           log.info(`review ${file.filename} failed`, e);
         }
       }
+
+      let fileReviewSummaryUserPrompt = "";
+      for (const fileReview of fileReviews) {
+        fileReviewSummaryUserPrompt += `Filename: ${fileReview.path}\nReview: ${fileReview.body}\n`
+      }
+
+      const reviewBody = await chat.getCommitReviewsSummary(fileReviewSummaryUserPrompt);
+
       try {
         await context.octokit.pulls.createReview({
           repo: repo.repo,
           owner: repo.owner,
           pull_number: context.pullRequest().pull_number,
-          body: "Code review by ChatGPT",
+          body: reviewBody,
           event: 'COMMENT',
           commit_id: commits[commits.length - 1].sha,
-          comments: ress,
+          comments: fileReviews,
         });
       } catch (e) {
         log.info(`Failed to create review`, e);
@@ -197,7 +237,7 @@ const matchPatterns = (patterns: string[], path: string) => {
     try {
       return minimatch(path, pattern.startsWith('/') ? "**" + pattern : pattern.startsWith("**") ? pattern : "**/" + pattern);
     } catch {
-      // if the pattern is not a valid glob pattern, try to match it as a regular expression
+      // if the pattern is not a valid glob pattern, try to match it as a regular expfileReviewsion
       try {
         return new RegExp(pattern).test(path);
       } catch (e) {
